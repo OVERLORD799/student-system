@@ -1,0 +1,98 @@
+Ubuntu + 仅公网 IP + MySQL 部署说明（学生综测系统）
+================================================
+
+一、服务器准备
+--------------
+1) 安装系统包与 MySQL、Nginx：
+
+   sudo apt update
+   sudo apt install -y python3-venv python3-pip nginx mysql-server
+
+2) 创建数据库与用户（在 mysql 中执行，密码请自行替换）：
+
+   sudo mysql
+   CREATE DATABASE student_system CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+   CREATE USER 'student_app'@'localhost' IDENTIFIED BY '你的强密码';
+   GRANT ALL PRIVILEGES ON student_system.* TO 'student_app'@'localhost';
+   FLUSH PRIVILEGES;
+   EXIT;
+
+二、上传代码
+------------
+建议路径示例：/opt/student-system（以下按此路径写，可按需改）
+
+   sudo mkdir -p /opt/student-system
+   sudo chown $USER:$USER /opt/student-system
+   # 用 git clone 或 scp 将项目放到 /opt/student-system
+
+三、Python 虚拟环境与依赖
+-------------------------
+   cd /opt/student-system/backend
+   python3 -m venv venv
+   source venv/bin/activate
+   pip install -r requirements.txt
+
+四、环境变量
+------------
+   sudo cp /opt/student-system/deploy/env.example /etc/student-system.env
+   sudo nano /etc/student-system.env
+
+必填项：
+- DJANGO_SECRET_KEY：长随机字符串
+- DJANGO_DEBUG=0
+- DJANGO_ALLOWED_HOSTS：你的服务器公网 IP，逗号分隔，建议同时含 127.0.0.1（本机自检）
+- DJANGO_CORS_ALLOWED_ORIGINS：若浏览器访问的前端地址与 API 不同源（例如前端在另一端口），填写完整 Origin（见 deploy/env.example）；Nginx 同域只提供一套站点时可留空
+- MYSQL_*：与上面 MySQL 中创建的一致
+
+五、构建前端并迁移
+------------------
+在开发机或服务器（需已安装 Node）：
+
+   cd /opt/student-system/frontend
+   npm ci
+   npm run build
+
+加载环境变量并迁移（示例，按你的 env 路径调整）：
+
+   set -a && source /etc/student-system.env && set +a
+   cd /opt/student-system/backend
+   source venv/bin/activate
+   python manage.py migrate
+   python manage.py createsuperuser
+
+六、Gunicorn（systemd）
+----------------------
+复制 deploy/gunicorn.service.example 为 /etc/systemd/system/student-system.service，
+修改其中路径与用户为实际值后：
+
+   sudo systemctl daemon-reload
+   sudo systemctl enable --now student-system
+   sudo systemctl status student-system
+
+七、Nginx
+---------
+复制 deploy/nginx-ip-only.conf.example 到 /etc/nginx/sites-available/student-system，
+将 server_name 与 root 路径改成你的 IP 与 dist 目录，然后：
+
+   sudo ln -sf /etc/nginx/sites-available/student-system /etc/nginx/sites-enabled/
+   sudo rm -f /etc/nginx/sites-enabled/default
+   sudo nginx -t
+   sudo systemctl reload nginx
+
+八、防火墙
+----------
+若使用 ufw：
+
+   sudo ufw allow OpenSSH
+   sudo ufw allow 'Nginx Full'
+   sudo ufw enable
+
+浏览器访问：http://你的公网IP/
+API 自检：http://你的公网IP/api/students/
+
+说明：仅 IP、无域名时一般不使用 HTTPS；若需加密可自建证书或使用 IP 证书（较少见），多数场景为内网或临时演示。
+
+九、与本地 SQLite 开发的区别
+----------------------------
+未设置 MYSQL_DATABASE 时，settings 仍使用 backend/db.sqlite3，便于本机开发。
+服务器上务必设置 MYSQL_DATABASE 等变量并执行 migrate。

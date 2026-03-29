@@ -1,0 +1,22 @@
+# 保存为 /etc/systemd/system/student-system.service
+# 修改 User、WorkingDirectory、EnvironmentFile 路径后执行:
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now student-system
+
+[Unit]
+Description=Student system Gunicorn
+After=network.target mysql.service
+
+[Service]
+User=www-data
+Group=www-data
+WorkingDirectory=/opt/student-system/backend
+EnvironmentFile=/etc/student-system.env
+ExecStart=/opt/student-system/backend/venv/bin/gunicorn config.wsgi:application \
+  --bind 127.0.0.1:8000 \
+  --workers 3 \
+  --timeout 120
+Restart=always
+
+[Install]
+WantedBy=multi-user.target

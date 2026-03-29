@@ -1,0 +1,42 @@
+# 保存为 /etc/nginx/sites-available/student-system
+# 将 /opt/student-system 换成你的项目实际路径
+# 将 server_name 改为你的公网 IP
+# sudo ln -s /etc/nginx/sites-available/student-system /etc/nginx/sites-enabled/
+# sudo nginx -t && sudo systemctl reload nginx
+
+server {
+    listen 80;
+    server_name 203.0.113.10;
+
+    client_max_body_size 20m;
+
+    # 前端静态（先在本机或 CI 执行 npm run build，上传 frontend/dist）
+    root /opt/student-system/frontend/dist;
+    index index.html;
+
+    location /assets/ {
+        try_files $uri =404;
+        access_log off;
+        expires 7d;
+    }
+
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+
+    location /api/ {
+        proxy_pass http://127.0.0.1:8000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    location /admin/ {
+        proxy_pass http://127.0.0.1:8000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
